@@ -196,6 +196,7 @@ def embedding_lookup(input_ids,
         initializer=create_initializer(initializer_range)
     )
 
+    # 转为一维Tensor
     flat_input_ids = tf.reshape(input_ids, [-1])
     if use_one_hot_embeddings:
         one_hot_input_ids = tf.one_hot(flat_input_ids, depth=vocab_size)
@@ -573,6 +574,21 @@ def attention_layer(from_tensor,
     pass
 
 
+def reshape_from_matrix(output_tensor, orig_shape_list):
+    # 将一个秩为2的张量重新构造回它原来的秩为>= 2的张量.
+    if len(orig_shape_list) == 2:
+        return output_tensor
+
+    output_shape = get_shape_list(output_tensor)
+
+    orig_dims = orig_shape_list[0:-1]
+    width = output_shape[-1]
+
+    return tf.reshape(output_tensor, orig_dims + [width])
+
+    pass
+
+
 def transformer_model(input_tensor,
                       attention_mask=None,
                       hidden_size=768,
@@ -632,9 +648,122 @@ def transformer_model(input_tensor,
                 attention_heads = []
                 with tf.variable_scope("self"):
                     attention_head = attention_layer(
-
+                        from_tensor=layer_input,
+                        to_tensor=layer_input,
+                        attention_mask=attention_mask,
+                        num_attention_heads=num_attention_heads,
+                        size_per_head=attention_head_size,
+                        attention_probs_dropout_prob=attention_probs_dropout_prob,
+                        initializer_range=initializer_range,
+                        do_return_2d_tensor=True,
+                        batch_size=batch_size,
+                        from_seq_length=seq_length,
+                        to_seq_length=seq_length
                     )
+                    attention_heads.append(attention_head)
+
+                attention_output = None
+                if len(attention_heads) == 1:
+                    attention_output = attention_heads[0]
+                else:
+                    # 在我们有其他序列的情况下,我们只是将在投射前它们连接到self-attention head.
+                    attention_output = tf.concat(attention_heads, axis=-1)
+
+                # 对layer-input执行一个线性映射到`hidden-size` 然后增加残差
+                with tf.variable_scope("output"):
+                    attention_output = tf.layers.dense(
+                        attention_output,
+                        hidden_size,
+                        kernel_initializer=create_initializer(initializer_range)
+                    )
+                    attention_output = dropout(attention_output, hidden_dropout_prob)
+                    attention_output = layer_norm(attention_output + layer_input)
+
+            # 激活函数只应用于前馈层
+            with tf.variable_scope("intermediate"):
+                intermediate_output = tf.layers.dense(
+                    attention_output,
+                    intermediate_size,
+                    activation=intermediate_act_fn,
+                    kernel_initializer=create_initializer(initializer_range)
+                )
+
+            # Down-project返回`hidden_size`, 然后添加残差部分.
+            with tf.variable_scope("output"):
+                layer_output = tf.layers.dense(
+                    intermediate_output,
+                    hidden_size,
+                    kernel_initializer=create_initializer(initializer_range)
+                )
+                layer_output = dropout(layer_output, hidden_dropout_prob)
+                layer_output = layer_norm(layer_output + attention_output)
+                prev_output = layer_output
+                all_layer_outputs.append(layer_output)
+
+    if do_return_all_layers:
+        final_outputs = []
+        for layer_output in all_layer_outputs:
+            final_output = reshape_from_matrix(layer_output, input_shape)
+            final_outputs.append(final_output)
+        return final_outputs
+    else:
+        final_output = reshape_from_matrix(prev_output, input_shape)
+        return final_output
+
     pass
+
+
+def get_activation(activation_string):
+    # 将字符串映射到Python函数. e.g.: "relu" ==> "tf.nn.relu";
+
+    # 我们假设任何一个不是String类型的字符串都是一个函数,
+    # 所以我们返回他;
+    if not isinstance(activation_string, six.string_types):
+        return activation_string
+
+    if not activation_string:
+        return None
+
+    act = activation_string.lower()
+    if act == "linear":
+        return None
+    elif act == "relu":
+        return tf.nn.relu
+    elif act == "gelu":
+        return gelu
+    elif act == "tanh":
+        return tf.tanh
+    else:
+        raise ValueError("这个激活函数: %s 暂时不支持" % act)
+
+    pass
+
+
+def get_assignment_map_from_checkpoint(tvars, init_checkpoint):
+    # 计算当前变量和检查点变量的并集.
+    assignment_map = {}
+    initialized_variable_names = {}
+
+    name_to_variable = collections.OrderedDict()
+    for var in tvars:
+        name = var.name
+        m = re.match("^(.*):\\d+$", name)
+        if m is not None:
+            name = m.group(1)
+        name_to_variable[name] = var
+
+    init_vars = tf.train.list_variables(init_checkpoint)
+
+    assignment_map = collections.OrderedDict()
+    for x in init_vars:
+        (name, var) = (x[0], x[1])
+        if name not in name_to_variable:
+            continue
+        assignment_map[name] = name
+        initialized_variable_names[name] = 1
+        initialized_variable_names[name + ":0"] = 1
+
+    return (assignment_map, initialized_variable_names)
 
 
 class BertModel(object):
@@ -729,5 +858,46 @@ class BertModel(object):
 
                 # 运行 transformer;
                 # `sequence_output`形状 = [batch_size, seq_length, hidden_size];
-                self.all_encoder_layers = transformer_model()
+                self.all_encoder_layers = transformer_model(
+                    input_tensor=self.embedding_output,
+                    attention_mask=attention_mask,
+                    hidden_size=config.hidden_size,
+                    num_hidden_layers=config.num_hidden_layers,
+                    num_attention_heads=config.num_attention_heads,
+                    intermediate_size=config.intermediate_size,
+                    intermediate_act_fn=get_activation(config.hidden_act),
+                    hidden_dropout_prob=config.hidden_dropout_prob,
+                    attention_probs_dropout_prob=config.attention_probs_dropout_prob,
+                    initializer_range=config.initializer_range,
+                    do_return_all_layers=True
+                )
 
+            self.sequence_output = self.all_encoder_layers[-1]
+            # "pooler"将encoded sequence的形状从[batch_size, seq_length, hidden_size]转变为
+            # [batch_size, hidden_size].这对于分段级(或分段对级)分类任务是必要的, 因为我们需要分段的固定维度表示.
+            with tf.variable_scope("pooler"):
+                # 我们通过简单地获取对应于第一个令牌的隐藏状态来“池”模型,
+                # 我们假设这是预先训练过的
+                first_token_tensor = tf.squeeze(self.sequence_output[:, 0:1, :], axis=1)
+                self.pooled_output = tf.layers.dense(
+                    first_token_tensor,
+                    config.hidden_size,
+                    activation=tf.tanh,
+                    kernel_initializer=create_initializer(config.initializer_range)
+                )
+
+    def get_pooled_output(self):
+        return self.pooled_output
+
+    def get_sequence_output(self):
+        # 获取最后的隐藏层的encoder
+        return self.sequence_output
+
+    def get_all_encoder_layers(self):
+        return self.all_encoder_layers
+
+    def get_embedding_output(self):
+        return self.embedding_output
+
+    def get_embedding_table(self):
+        return self.embedding_table
