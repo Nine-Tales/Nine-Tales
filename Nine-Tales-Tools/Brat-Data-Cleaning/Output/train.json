@@ -1,0 +1,2 @@
+{'text': '', 'spo_list': [{'predicate': 'Part-of', 'object_type': 'Protein', 'subject_type': 'Complex', 'object': 'c-Rel', 'subject': 'NF-kappa B'}]}
+{'text': '', 'spo_list': [{'predicate': 'Part-of', 'object_type': 'Protein', 'subject_type': 'Complex', 'object': 'The', 'subject': 'annotation'}]}

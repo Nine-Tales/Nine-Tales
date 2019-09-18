@@ -1,0 +1,15 @@
+{"id":"T1","entity":"c-Rel","type":"Protein","start":"139","end":"144"}
+{"id":"T2","entity":"NF-kappa B","type":"Complex","start":"163","end":"173"}
+{"id":"R1","entity":null,"type":"Part-of","start":"T1","end":"T2"}
+{"id":"T3","entity":"p105","type":"Protein","start":"485","end":"489"}
+{"id":"T4","entity":"KBF1","type":"Protein","start":"507","end":"511"}
+{"id":"T5","entity":"EBP-1","type":"Protein","start":"516","end":"521"}
+{"id":"*","entity":null,"type":"Equiv","start":"T3","end":"T4 T5"}
+{"id":"T6","entity":"c-Rel","type":"Protein","start":"1204","end":"1209"}
+{"id":"T7","entity":"NF-kappa B","type":"Complex","start":"1228","end":"1238"}
+{"id":"T8","entity":"p105","type":"Protein","start":"1245","end":"1249"}
+{"id":"T9","entity":"KBF1","type":"Protein","start":"1267","end":"1271"}
+{"id":"T10","entity":"EBP-1","type":"Protein","start":"1276","end":"1281"}
+{"id":"T11","entity":"The","type":"Protein","start":"525","end":"528"}
+{"id":"T12","entity":"annotation","type":"Complex","start":"535","end":"545"}
+{"id":"R2","entity":null,"type":"Part-of","start":"T11","end":"T12"}
