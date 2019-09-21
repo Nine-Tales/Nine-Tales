@@ -139,6 +139,7 @@ def main():
 
     print(final_stations)
 
+
 if __name__ == '__main__':
     main()
     # greedy()
