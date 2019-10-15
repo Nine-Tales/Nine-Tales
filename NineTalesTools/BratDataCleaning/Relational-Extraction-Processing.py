@@ -56,21 +56,58 @@ def process_json_2_need(json_path):
 
         if "R" in data_dict["id"]:
             relation_dict['spo_list'][0]['predicate'] = data_dict['type']
-            for j in range(0, i):
+            for j in range(0, len(data)):
                 data_j = json.loads(data[j])
                 if data_j['id'] == data_dict['start']:
                     relation_dict['spo_list'][0]['object_type'] = data_j['type']
                     relation_dict['spo_list'][0]['object'] = data_j['entity']
-                if data_j['id'] == data_dict['end']:
+                elif data_j['id'] == data_dict['end']:
                     relation_dict['spo_list'][0]['subject_type'] = data_j['type']
                     relation_dict['spo_list'][0]['subject'] = data_j['entity']
-                    break
             with open("Output/train.json", "a+", encoding="utf-8") as fw:
                 fw.write(str(relation_dict) + '\n')
 
 
+def process_json_2_test_data(json_path):
+    with open(json_path, "r", encoding="utf-8") as fr:
+        test_data = fr.readlines()
+    for i in test_data:
+        data_dict = json.loads(i.strip())
+        with open("Output/test.json", "a+", encoding="utf-8") as fw:
+                fw.write(str({"text": data_dict["text"]}) + '\n')
+
+
+def txt_2_test_data(json_path):
+    with open(json_path, "r", encoding="utf-8") as fr:
+        test_data = fr.readlines()
+
+    for i in test_data:
+        test_dict = {}
+        if len(test_data) > 0:
+            test_dict["test"] = i.strip()
+        with open("test_for_json.json", "a+", encoding="utf-8") as fw:
+            fw.write(str(test_dict) + "\n")
+
+
+def count_text(json_path):
+    with open(json_path, "r", encoding="utf-8") as fr:
+        data_source = fr.readlines()
+
+    total = len(data_source)
+    use = 0
+    for i in data_source:
+        if len(i.strip()) > 0:
+            use += 1
+    percent = "%.2f"% (use / total)
+    print(percent)
+
+
+
 if __name__ == '__main__':
-    process_ann_to_json("BratData/Relation_Annotation.ann")
-    process_json_2_need("BratData/df2json.txt")
+    # process_ann_to_json("BratData/3.ann")
+    # process_json_2_need("BratData/df2json.txt")
+    # process_json_2_test_data("Output/train.json")
+    # txt_2_test_data("BratData/文本.txt")
+    count_text("BratData/predicate_predict.txt")
 
 
