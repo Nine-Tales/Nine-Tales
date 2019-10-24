@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # @Time : 2019/9/21 10:22 
 # @Author : Nine-Tales
-# @Desc: 贪心算法各种示例;
+# @Desc: 贪心算法各种示例; 贪心算法:求局部最优解.
 
 import sys
 import os
